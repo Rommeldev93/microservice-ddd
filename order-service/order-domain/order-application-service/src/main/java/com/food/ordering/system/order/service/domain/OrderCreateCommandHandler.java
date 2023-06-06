@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Optional;
 import java.util.UUID;
 
+
 @Slf4j
 @Component
 public class OrderCreateCommandHandler {
@@ -26,23 +27,31 @@ public class OrderCreateCommandHandler {
     private final CustomerRepository customerRepository;
     private final RestaurantRepository restaurantRepository;
     private final OrderDataMapper orderDataMapper;
+    private final ApplicationDomainEventPublisher applicationDomainEventPublisher;
 
-    public OrderCreateCommandHandler(OrderDomainService orderDomainService, OrderRepository orderRepository, CustomerRepository customerRepository, RestaurantRepository restaurantRepository, OrderDataMapper orderDataMapper) {
+
+    public OrderCreateCommandHandler(OrderDomainService orderDomainService,
+                                     OrderRepository orderRepository,
+                                     CustomerRepository customerRepository,
+                                     RestaurantRepository restaurantRepository,
+                                     OrderDataMapper orderDataMapper,
+                                     ApplicationDomainEventPublisher applicationDomainEventPublisher) {
         this.orderDomainService = orderDomainService;
         this.orderRepository = orderRepository;
         this.customerRepository = customerRepository;
         this.restaurantRepository = restaurantRepository;
         this.orderDataMapper = orderDataMapper;
+        this.applicationDomainEventPublisher = applicationDomainEventPublisher;
     }
 
-    @Transactional
     public CreateOrderResponse createOrder(CreateOrderCommand createOrderCommand) {
+        //OrderCreatedEvent orderCreatedEvent = orderCreateHelper.persistOrder(createOrderCommand);
         checkCustomer(createOrderCommand.getCustomerId());
         Restaurant restaurant = checkRestaurant(createOrderCommand);
         Order order = orderDataMapper.createOrderCommandToOrder(createOrderCommand);
         OrderCreatedEvent orderCreatedEvent = orderDomainService.validateAndInitiateOrder(order, restaurant);
         Order orderResult = saveOrder(order);
-        log.info("Order is created with id: {}", orderResult.getId().getValue());
+        log.info("Order is created with id: {}", orderCreatedEvent.getOrder().getId().getValue());
         return orderDataMapper.orderToCreateOrderResponse(orderResult);
     }
 
@@ -60,17 +69,18 @@ public class OrderCreateCommandHandler {
         Optional<Customer> customer = customerRepository.findCustomer(customerId);
         if (customer.isEmpty()) {
             log.warn("Could not find customer with customer id: {}", customerId);
-            throw new OrderDomainException("Could not find customer with customer id: " + customer);
+            throw new OrderDomainException("Could not find customer with customer id: " + customerId);
         }
     }
 
     private Order saveOrder(Order order) {
         Order orderResult = orderRepository.save(order);
         if (orderResult == null) {
-            log.info("Could not save order!");
+            log.warn("Could not save order!");
             throw new OrderDomainException("Could not save order!");
         }
-        log.info("Could is saved with id: {}", orderResult.getId().getValue());
+        log.info("Order is saved with id: {}", orderResult.getId().getValue());
         return orderResult;
     }
+
 }
